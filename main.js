@@ -1,4 +1,6 @@
 import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
+import { OrbitControls } from 'https://esm.sh/three@0.154.0/examples/jsm/controls/OrbitControls.js?bundle';
+
 import { DDSLoader } from './ddsLoader.js';
 
 import { CLoader, sModelDefinition } from './khmModel.js';
@@ -23,10 +25,10 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Lighting
-const light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(5, 10, 7.5);
-scene.add(light);
+const controls = new OrbitControls(camera, renderer.domElement);
+
+const ambient = new THREE.AmbientLight(0xffffff, 0.4); // soft white light
+scene.add(ambient);
 
 fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
@@ -64,7 +66,7 @@ fileInput.addEventListener('change', async (e) => {
   }
   geo.computeVertexNormals();
 
-  const texture = ddsLoader.load('akm.dds');
+  const texture = ddsLoader.load('cia_01.dds');
   const mat = new THREE.MeshStandardMaterial({
     map: texture,
     flatShading: false,
@@ -83,6 +85,7 @@ fileInput.addEventListener('change', async (e) => {
 
 function animate() {
   requestAnimationFrame(animate);
+  controls.update();
   renderer.render(scene, camera);
 }
 animate();
