@@ -1,5 +1,10 @@
 import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
+import { DDSLoader } from './ddsLoader.js';
+
 import { CLoader, sModelDefinition } from './khmModel.js';
+
+const ddsLoader = new DDSLoader();
+THREE.DefaultLoadingManager.addHandler(/\.dds$/i, ddsLoader);
 
 const fileInput = document.getElementById('fileInput');
 const output = document.getElementById('output');
@@ -59,16 +64,21 @@ fileInput.addEventListener('change', async (e) => {
   }
   geo.computeVertexNormals();
 
+  const texture = ddsLoader.load('akm.dds');
   const mat = new THREE.MeshStandardMaterial({
-    vertexColors: true,
+    map: texture,
     flatShading: false,
   });
+  //   const mat = new THREE.MeshStandardMaterial({
+  //     vertexColors: true,
+  //     flatShading: false,
+  //   });
   const mesh = new THREE.Mesh(geo, mat);
   scene.add(mesh);
 
-  const texture = new THREE.TextureLoader().load('path/to/yourTexture.png');
-  mat.map = texture;
-  mat.needsUpdate = true;
+  //   const texture = new THREE.TextureLoader().load('path/to/yourTexture.dds');
+  //   mat.map = texture;
+  //   mat.needsUpdate = true;
 });
 
 function animate() {
