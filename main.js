@@ -30,6 +30,34 @@ const controls = new OrbitControls(camera, renderer.domElement);
 const ambient = new THREE.AmbientLight(0xffffff, 0.4); // soft white light
 scene.add(ambient);
 
+const ddsInput = document.getElementById('ddsInput');
+let meshMaterial = null; // Will point to our mesh's material
+ddsInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const arrayBuffer = await file.arrayBuffer();
+  const ddsLoader = new DDSLoader();
+  const dds = ddsLoader.parse(arrayBuffer, true); // this returns a raw info object
+  const texture = new THREE.CompressedTexture(
+    dds.mipmaps,
+    dds.width,
+    dds.height,
+    dds.format
+  );
+
+  // apply required settings
+  texture.minFilter = THREE.LinearMipMapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+
+  meshMaterial.map = texture;
+  meshMaterial.needsUpdate = true;
+});
+
 fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   const buffer = await file.arrayBuffer();
@@ -66,16 +94,16 @@ fileInput.addEventListener('change', async (e) => {
   }
   geo.computeVertexNormals();
 
-  const texture = ddsLoader.load('cia_01.dds');
-  const mat = new THREE.MeshStandardMaterial({
-    map: texture,
-    flatShading: false,
-  });
+  //   const texture = ddsLoader.load('cia_01.dds');
   //   const mat = new THREE.MeshStandardMaterial({
-  //     vertexColors: true,
+  //     map: texture,
   //     flatShading: false,
   //   });
-  const mesh = new THREE.Mesh(geo, mat);
+  meshMaterial = new THREE.MeshStandardMaterial({
+    // vertexColors: true,
+    flatShading: false,
+  });
+  const mesh = new THREE.Mesh(geo, meshMaterial);
   scene.add(mesh);
 
   //   const texture = new THREE.TextureLoader().load('path/to/yourTexture.dds');
