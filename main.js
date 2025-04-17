@@ -39,14 +39,36 @@ fileInput.addEventListener('change', async (e) => {
 
   geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
   geo.setIndex(indices);
+  if (model.pMesh.pColors.length > 0) {
+    const colors = model.pMesh.pColors.flatMap((rgba) => {
+      // Convert 0xAARRGGBB to normalized RGB
+      const r = ((rgba >> 16) & 0xff) / 255;
+      const g = ((rgba >> 8) & 0xff) / 255;
+      const b = (rgba & 0xff) / 255;
+      return [r, g, b];
+    });
+
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  }
+  if (model.pMesh.pTexCoords[0].length > 0) {
+    const uvs = [];
+    for (const uv of model.pMesh.pTexCoords[0]) {
+      uvs.push(uv[0], uv[1]);
+    }
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  }
   geo.computeVertexNormals();
 
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x88ccff,
+    vertexColors: true,
     flatShading: false,
   });
   const mesh = new THREE.Mesh(geo, mat);
   scene.add(mesh);
+
+  const texture = new THREE.TextureLoader().load('path/to/yourTexture.png');
+  mat.map = texture;
+  mat.needsUpdate = true;
 });
 
 function animate() {
