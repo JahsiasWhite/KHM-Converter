@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>KHM Loader</title>
+  </head>
+  <body>
+    <input type="file" id="fileInput" accept=".khm" />
+    <pre id="output"></pre>
+
+    <script type="module">
+      import { CLoader } from './khmModel.js';
+
+      fileInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        const arrayBuffer = await file.arrayBuffer();
+
+        const loader = new CLoader(arrayBuffer);
+        const { header, model } = loader.loadModel();
+
+        if (!header) {
+          output.textContent = 'Invalid file';
+          return;
+        }
+
+        output.textContent =
+          `Signature: ${String.fromCharCode(...header.uiSig)}\n` +
+          `Version: ${header.uiVer}\n` +
+          `Bones Read: ${model.numBones}\n\n` +
+          model.lBones
+            .map(
+              (b, i) =>
+                `${i}: ${b.szName} (id: ${b.uiId}, parent: ${b.uiParentId})`
+            )
+            .join('\n') +
+          '\n' +
+          model.lHelpers.map((h, i) => `${i}: ${h.szName} (helper)`).join('\n');
+
+        if (model.pMesh) {
+          output.textContent +=
+            `\nMesh: ${model.pMesh.szName}\n` +
+            `Vertices: ${model.pMesh.numVertices}\n` +
+            `Indices: ${model.pMesh.numIndices}\n` +
+            `Min: ${model.pMesh.min.join(', ')}\n` +
+            `Max: ${model.pMesh.max.join(', ')}\n`;
+        }
+
+        if (model.pMesh.pSkinWeights.length) {
+          output.textContent += `Skinned Vertices: ${model.pMesh.pSkinWeights.length}\n`;
+        }
+        if (model.pMesh.pCollisions.length) {
+          output.textContent += `Collisions: ${model.pMesh.pCollisions.length}\n`;
+        }
+
+        if (model.pAnimation) {
+          output.textContent +=
+            `\nAnimation:\n` +
+            `Nodes: ${model.pAnimation.numNodes}\n` +
+            `Frames: ${model.pAnimation.numNodeFrames}\n` +
+            `Frame Duration: ${model.pAnimation.frameDurationMs.toFixed(
+              2
+            )} ms\n`;
+        }
+
+        if (model.pAnimationMask) {
+          output.textContent +=
+            `\nAnimation Mask:\n` +
+            `Masked Nodes: ${model.pAnimationMask.numNodes}\n` +
+            model.pAnimationMask.pNodes
+              .map(
+                (entry) =>
+                  `- ${entry.szObjectName}: ${
+                    entry.mask ? 'Enabled' : 'Masked'
+                  }`
+              )
+              .join('\n');
+        }
+      });
+    </script>
+  </body>
+</html>
