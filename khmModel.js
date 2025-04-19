@@ -67,8 +67,6 @@ export class CLoader {
       const bone = sObjectBase.fromLoader(this);
       model.lBones.push(bone);
     }
-
-    console.error('Bones:', model.lBones);
   }
 
   /**
@@ -117,7 +115,6 @@ export class CLoader {
       mesh.pSkinBoneIndices.push(indices);
     }
   }
-
   /**
    * Reads collision shape data into the mesh.
    * @param {sObjectMesh} mesh
@@ -266,7 +263,6 @@ export class CLoader {
       }
     }
 
-    // Skip skin + collisions for now
     this.readSkin(mesh);
     this.readCollisionData(mesh);
 

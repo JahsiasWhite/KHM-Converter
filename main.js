@@ -1,37 +1,63 @@
+// khmMeshEditor.js
+// TODO: Remove the unused stuff, like unused functions and early returns
 import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
-import { OrbitControls } from 'https://esm.sh/three@0.154.0/examples/jsm/controls/OrbitControls.js?bundle';
+import { OrbitControls } from 'https://esm.sh/three@0.154.0/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'https://esm.sh/three@0.154.0/examples/jsm/controls/TransformControls.js';
+import { GLTFLoader } from 'https://esm.sh/three@0.154.0/examples/jsm/loaders/GLTFLoader.js';
+import { CLoader } from './khmModel.js'; // your loader
+import { KHMWriter } from './khmWriter.js'; // new khm writer
+import { DDSLoader } from './ddsLoader.js'; // TODO: Can I just use a CDN for this?
+import JSZip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm';
+import * as BufferGeometryUtils from 'https://esm.sh/three@0.154.0/examples/jsm/utils/BufferGeometryUtils.js';
 
-import { DDSLoader } from './ddsLoader.js';
+let camera, scene, renderer, controls, transform;
+let skinnedMesh = null;
+let vertexHandles = [];
+let model = null;
 
-import { CLoader, sModelDefinition } from './khmModel.js';
+init();
 
-const ddsLoader = new DDSLoader();
-THREE.DefaultLoadingManager.addHandler(/\.dds$/i, ddsLoader);
+function init() {
+  // Scene setup
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(
+    60,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  camera.position.set(0, 1, 2);
 
-const fileInput = document.getElementById('fileInput');
-const output = document.getElementById('output');
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
 
-// Setup Three.js scene
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(
-  60,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
-camera.position.set(0, 0, 5);
+  controls = new OrbitControls(camera, renderer.domElement);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+  transform = new TransformControls(camera, renderer.domElement);
+  transform.addEventListener('dragging-changed', (e) => {
+    controls.enabled = !e.value;
+  });
+  scene.add(transform);
 
-const controls = new OrbitControls(camera, renderer.domElement);
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(5, 10, 5);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.3));
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.4); // soft white light
-scene.add(ambient);
+  document.getElementById('fileInput').addEventListener('change', loadModel2);
+  document
+    .getElementById('gltfInput')
+    .addEventListener('change', loadZippedGLTF);
+  document.getElementById('exportGLTF').addEventListener('click', exportKHM);
+
+  window.addEventListener('pointerdown', onPointerDown);
+
+  animate();
+}
+let meshMaterial = null;
 
 const ddsInput = document.getElementById('ddsInput');
-let meshMaterial = null; // Will point to our mesh's material
 ddsInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -58,7 +84,7 @@ ddsInput.addEventListener('change', async (e) => {
   meshMaterial.needsUpdate = true;
 });
 
-fileInput.addEventListener('change', async (e) => {
+async function loadModel2(e) {
   const file = e.target.files[0];
   const buffer = await file.arrayBuffer();
 
@@ -109,6 +135,338 @@ fileInput.addEventListener('change', async (e) => {
   //   const texture = new THREE.TextureLoader().load('path/to/yourTexture.dds');
   //   mat.map = texture;
   //   mat.needsUpdate = true;
+}
+
+function loadModel(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  file.arrayBuffer().then((buffer) => {
+    const loader = new CLoader(buffer);
+    const result = loader.loadModel();
+    model = result.model;
+
+    const geometry = new THREE.BufferGeometry();
+    const verts = [];
+    const indices = model.pMesh.pIndices;
+
+    for (const v of model.pMesh.pVertices) {
+      verts.push(v[0], v[1], v[2]);
+    }
+
+    geometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(verts, 3)
+    );
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xcccccc,
+      vertexColors: false,
+    });
+    skinnedMesh = new THREE.Mesh(geometry, material);
+    scene.add(skinnedMesh);
+
+    createVertexHandles();
+  });
+}
+
+async function loadZippedGLTF(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const zip = await JSZip.loadAsync(file);
+  const blobURLs = {};
+  let gltfPath = null;
+  const fileMap = new Map();
+
+  for (const filename of Object.keys(zip.files)) {
+    const blob = await zip.files[filename].async('blob');
+    const blobURL = URL.createObjectURL(blob);
+    fileMap.set(filename, blobURL);
+    if (
+      filename.toLowerCase().endsWith('.gltf') ||
+      filename.toLowerCase().endsWith('.glb')
+    ) {
+      gltfPath = filename;
+    }
+  }
+
+  if (!gltfPath) {
+    alert('No .gltf or .glb file found in zip.');
+    return;
+  }
+
+  const loader = new GLTFLoader();
+  loader.setCrossOrigin('anonymous');
+
+  // Override resource loading
+  loader.manager.setURLModifier((url) => {
+    const cleanURL = decodeURIComponent(url.split('/').pop());
+    return fileMap.get(cleanURL) || url;
+  });
+
+  const gltfURL = fileMap.get(gltfPath);
+  loader.load(gltfURL, (gltf) => {
+    scene.add(gltf.scene);
+    skinnedMesh = gltf.scene;
+
+    // Try to extract geometry
+    const mesh = gltf.scene.getObjectByProperty('type', 'Mesh');
+    if (!mesh || !mesh.geometry) {
+      alert('No mesh found in GLTF scene.');
+      return;
+    }
+
+    const geometry = mesh.geometry;
+    const verts = geometry.attributes.position.array;
+    const indices = geometry.index ? geometry.index.array : [];
+
+    // Build mock model
+    model = {
+      pMesh: {
+        szName: 'GLTFMesh',
+        uiId: 0,
+        uiParentId: 255,
+        matLocal: new Float32Array(16).fill(0),
+        matGlobal: new Float32Array(16).fill(0),
+        numVertices: verts.length / 3,
+        pVertices: [],
+        pNormals: [],
+        numIndices: indices.length,
+        pIndices: [],
+        pFaceNormals: [],
+        pColors: [],
+        pTexCoords: [[], []],
+        min: [0, 0, 0],
+        max: [0, 0, 0],
+        volume: 0,
+      },
+      lBones: [],
+      lHelpers: [],
+      numBones: 0,
+      numHelpers: 0,
+    };
+
+    for (let i = 0; i < verts.length; i += 3) {
+      model.pMesh.pVertices.push([verts[i], verts[i + 1], verts[i + 2]]);
+    }
+
+    if (geometry.attributes.normal) {
+      const normals = geometry.attributes.normal.array;
+      for (let i = 0; i < normals.length; i += 3) {
+        model.pMesh.pNormals.push([normals[i], normals[i + 1], normals[i + 2]]);
+      }
+    }
+
+    for (let i = 0; i < indices.length; i++) {
+      model.pMesh.pIndices.push(indices[i]);
+    }
+
+    console.log('Zipped GLTF loaded and converted to KHM model.', model);
+  });
+}
+
+const OUTPUT = 'output.khm';
+const MAX_NAME = 48;
+function writeKHMFromGLB(scene, writer) {
+  // HEADER: KHM + version
+  writer.writeUint8('K'.charCodeAt(0));
+  writer.writeUint8('H'.charCodeAt(0));
+  writer.writeUint8('M'.charCodeAt(0));
+  writer.writeUint8(0x00);
+  writer.writeUint32(101); // version
+
+  // let mesh = null;
+  // scene.traverse((child) => {
+  //   if (child.isMesh && !mesh) mesh = child;
+  // });
+  // if (!mesh) throw new Error('No mesh found in glTF scene');
+  scene.updateMatrixWorld(true);
+  const geometries = [];
+  scene.traverse((child) => {
+    if (child.isMesh) {
+      const geo = child.geometry.clone();
+      geo.applyMatrix4(child.matrixWorld);
+      geometries.push(geo);
+    }
+  });
+
+  if (geometries.length === 0) throw new Error('No meshes found');
+  const mergedGeometry = BufferGeometryUtils.mergeGeometries(geometries, false);
+  const mesh = new THREE.Mesh(mergedGeometry);
+
+  const geometry = mesh.geometry;
+  const position = geometry.getAttribute('position');
+  const normal = geometry.getAttribute('normal');
+  const uv = geometry.getAttribute('uv');
+  const index = geometry.index;
+
+  // Bones (none for now)
+  writer.writeUint8(0); // num bones
+
+  // Helpers (none for now)
+  writer.writeUint8(0); // num helpers
+
+  // Mesh present
+  writer.writeUint8(1);
+
+  // sObjectBase
+  writer.writeString(mesh.name || 'mesh', MAX_NAME);
+  writer.writeUint32(1); // id
+  writer.writeUint32(0); // parent id
+  for (let i = 0; i < 16; i++)
+    writer.writeFloat32(i === 0 || i === 5 || i === 10 || i === 15 ? 1 : 0); // local mat
+  for (let i = 0; i < 16; i++)
+    writer.writeFloat32(i === 0 || i === 5 || i === 10 || i === 15 ? 1 : 0); // global mat
+
+  // Geometry
+  writer.writeUint32(position.count); // num verts
+  for (let i = 0; i < position.count; i++) {
+    writer.writeFloat32(position.getX(i));
+    writer.writeFloat32(position.getY(i));
+    writer.writeFloat32(position.getZ(i));
+  }
+
+  for (let i = 0; i < normal.count; i++) {
+    writer.writeFloat32(normal.getX(i));
+    writer.writeFloat32(normal.getY(i));
+    writer.writeFloat32(normal.getZ(i));
+  }
+
+  writer.writeUint32(index.count); // indices
+  for (let i = 0; i < index.count; i++) {
+    writer.writeUint16(index.array[i]);
+  }
+
+  // Face normals (placeholder)
+  const faceCount = index.count / 3;
+  for (let i = 0; i < faceCount; i++) {
+    writer.writeFloat32(0);
+    writer.writeFloat32(1);
+    writer.writeFloat32(0);
+  }
+
+  // Vertex colors (not present)
+  writer.writeUint8(0);
+
+  // TexCoord count
+  writer.writeUint32(1);
+  for (let i = 0; i < uv.count; i++) {
+    writer.writeFloat32(uv.getX(i));
+    writer.writeFloat32(uv.getY(i));
+  }
+
+  // Skinning
+  writer.writeUint8(0); // no skin
+
+  // Collision data
+  writer.writeUint32(0); // no collision
+
+  // Bounding box (min/max)
+  const box = new THREE.Box3().setFromBufferAttribute(position);
+  writer.writeFloat32(box.min.x);
+  writer.writeFloat32(box.min.y);
+  writer.writeFloat32(box.min.z);
+  writer.writeFloat32(box.max.x);
+  writer.writeFloat32(box.max.y);
+  writer.writeFloat32(box.max.z);
+
+  writer.writeFloat32(0); // volume
+
+  // Animation
+  writer.writeUint8(0); // no animation
+
+  // Animation mask
+  writer.writeUint8(0);
+}
+export async function loadGLB(filePath) {
+  const loader = new GLTFLoader();
+  return new Promise((resolve) => {
+    loader.load(filePath, resolve);
+  });
+}
+async function exportKHM() {
+  const gltf = await loadGLB('./test.glb');
+  const scene = gltf.scene;
+  const writer = new KHMWriter(model);
+
+  writeKHMFromGLB(scene, writer);
+
+  // fs.writeFileSync(OUTPUT, writer.getUint8Array());
+  const blob2 = await new Blob([new Uint8Array(writer.buffer)], {
+    type: 'application/octet-stream',
+  });
+  console.error(blob2);
+  const link2 = document.createElement('a');
+  link2.href = URL.createObjectURL(blob2);
+  link2.download = 'exported_model.khm';
+  link2.click();
+  console.log(`✅ Exported ${OUTPUT}`);
+
+  return;
+  // START OF GLTF EXPORT CODE
+  if (!model || !model.pMesh) {
+    alert('No model loaded to export.');
+    console.error(model, skinnedMesh);
+    return;
+  }
+
+  // const writer = new KHMWriter(model);
+  const blob = writer.write();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'exported_model.khm';
+  link.click();
+}
+
+function createVertexHandles() {
+  vertexHandles.forEach((h) => scene.remove(h));
+  vertexHandles = [];
+
+  const verts = model.pMesh.pVertices;
+
+  for (let i = 0; i < verts.length; i++) {
+    const v = verts[i];
+    const handle = new THREE.Mesh(
+      new THREE.SphereGeometry(0.01),
+      new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    );
+    handle.position.set(v[0], v[1], v[2]);
+    handle.userData.vertexIndex = i;
+    scene.add(handle);
+    vertexHandles.push(handle);
+  }
+}
+
+function onPointerDown(e) {
+  const mouse = new THREE.Vector2(
+    (e.clientX / window.innerWidth) * 2 - 1,
+    -(e.clientY / window.innerHeight) * 2 + 1
+  );
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera);
+
+  const intersects = raycaster.intersectObjects(vertexHandles);
+  if (intersects.length > 0) {
+    transform.attach(intersects[0].object);
+  }
+}
+
+transform.addEventListener('objectChange', () => {
+  const handle = transform.object;
+  const index = handle.userData.vertexIndex;
+  const pos = handle.position;
+
+  model.pMesh.pVertices[index][0] = pos.x;
+  model.pMesh.pVertices[index][1] = pos.y;
+  model.pMesh.pVertices[index][2] = pos.z;
+
+  const attr = skinnedMesh.geometry.attributes.position;
+  attr.setXYZ(index, pos.x, pos.y, pos.z);
+  attr.needsUpdate = true;
 });
 
 function animate() {
@@ -116,4 +474,3 @@ function animate() {
   controls.update();
   renderer.render(scene, camera);
 }
-animate();
