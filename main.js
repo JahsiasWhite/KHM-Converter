@@ -50,7 +50,7 @@ function init() {
   // document
   //   .getElementById('gltfInput')
   //   .addEventListener('change', loadZippedGLTF);
-  document.getElementById('exportKHM').addEventListener('click', exportKHM);
+  // document.getElementById('exportKHM').addEventListener('click', exportKHM);
 
   window.addEventListener('pointerdown', onPointerDown);
 
@@ -290,6 +290,10 @@ function writeKHMFromGLB(scene, writer) {
   const center = box.getCenter(new THREE.Vector3());
   mesh.geometry.translate(-center.x, -center.y, -center.z);
   mesh.geometry.scale(scale, scale, scale);
+  // Rotate 90 degrees to the left around Y axis
+  const axis = new THREE.Vector3(0, 1, 0); // Y-axis
+  const angle = THREE.MathUtils.degToRad(90); // 90 degrees to the left
+  mesh.geometry.applyMatrix4(new THREE.Matrix4().makeRotationAxis(axis, angle));
 
   const geometry = mesh.geometry;
   // const position = geometry.getAttribute('position');
@@ -301,6 +305,7 @@ function writeKHMFromGLB(scene, writer) {
   writer.writeUint8(0); // num bones
 
   // Helpers (none for now)
+  // Have to manually define where the muzzle is
   writer.writeUint8(0); // num helpers
 
   // Mesh present
@@ -382,9 +387,12 @@ function writeKHMFromGLB(scene, writer) {
       // console.log('vertexColors', child.material.vertexColors); // If this is true, is a different conversion required?
 
       const texture = child.material.map;
-      const canvas = extractTextureCanvasFromMap(texture);
-      if (canvas) {
-        downloadCanvasAsDDSPlaceholder(canvas, 'diffuse.png'); // manually convert to .dds
+      // TODO: Can I return if no texture here or will that break too early?
+      if (texture) {
+        const canvas = extractTextureCanvasFromMap(texture);
+        if (canvas) {
+          downloadCanvasAsDDSPlaceholder(canvas, 'diffuse.png'); // manually convert to .dds
+        }
       }
     }
   });
@@ -419,8 +427,27 @@ export async function loadGLB(filePath) {
     loader.load(filePath, resolve);
   });
 }
+const fileInput = document.getElementById('exportKHM');
+const exportBtn = document.getElementById('exportKHM');
+// exportBtn.addEventListener('click', () => {
+//   fileInput.click();
+// });
+
+fileInput.addEventListener('change', async () => {
+  await exportKHM();
+});
 async function exportKHM() {
-  const gltf = await loadGLB('./test.glb');
+  // document.getElementById('glbInput').click();
+
+  const file = fileInput.files[0];
+  if (!file) {
+    alert('Please select a GLB file first.');
+    return;
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const blobURL = URL.createObjectURL(new Blob([arrayBuffer]));
+  const gltf = await loadGLB(blobURL);
   const scene = gltf.scene;
   const writer = new KHMWriter(model);
 
