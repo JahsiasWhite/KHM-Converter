@@ -251,6 +251,52 @@ async function loadZippedGLTF(event) {
   });
 }
 
+const glbPreviewInput = document.getElementById('glbPreviewInput');
+const rotateLeftBtn = document.getElementById('rotateLeftBtn');
+const rotateRightBtn = document.getElementById('rotateRightBtn');
+
+let previewModel = null;
+let exportRotationY = 0; // tracks how much user rotated
+
+glbPreviewInput.addEventListener('change', async (e) => {
+  if (previewModel) scene.remove(previewModel);
+
+  const file = e.target.files[0];
+  const arrayBuffer = await file.arrayBuffer();
+  const blobURL = URL.createObjectURL(new Blob([arrayBuffer]));
+
+  const loader = new GLTFLoader();
+  loader.load(blobURL, (gltf) => {
+    previewModel = gltf.scene;
+
+    // Normalize size and center it
+    const box = new THREE.Box3().setFromObject(previewModel);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const center = box.getCenter(new THREE.Vector3());
+    const scale = 1.0 / Math.max(size.x, size.y, size.z);
+
+    previewModel.scale.set(scale, scale, scale);
+    previewModel.position.sub(center.multiplyScalar(scale));
+
+    scene.add(previewModel);
+  });
+});
+
+rotateLeftBtn.addEventListener('click', () => {
+  if (previewModel) {
+    exportRotationY -= Math.PI / 2;
+    previewModel.rotation.y = exportRotationY;
+  }
+});
+
+rotateRightBtn.addEventListener('click', () => {
+  if (previewModel) {
+    exportRotationY += Math.PI / 2;
+    previewModel.rotation.y = exportRotationY;
+  }
+});
+
 const OUTPUT = 'output.khm';
 const MAX_NAME = 48;
 function writeKHMFromGLB(scene, writer) {
@@ -293,7 +339,12 @@ function writeKHMFromGLB(scene, writer) {
   // Rotate 90 degrees to the left around Y axis
   const axis = new THREE.Vector3(0, 1, 0); // Y-axis
   const angle = THREE.MathUtils.degToRad(90); // 90 degrees to the left
-  mesh.geometry.applyMatrix4(new THREE.Matrix4().makeRotationAxis(axis, angle));
+  // mesh.geometry.applyMatrix4(new THREE.Matrix4().makeRotationAxis(axis, angle));
+  console.error(
+    'exportRotationY',
+    exportRotationY,
+    THREE.MathUtils.degToRad(90)
+  );
 
   const geometry = mesh.geometry;
   // const position = geometry.getAttribute('position');
@@ -427,31 +478,32 @@ export async function loadGLB(filePath) {
     loader.load(filePath, resolve);
   });
 }
-const fileInput = document.getElementById('exportKHM');
-const exportBtn = document.getElementById('exportKHM');
+// const fileInput = document.getElementById('exportKHM');
+// const exportBtn = document.getElementById('exportKHM');
+document.getElementById('exportKHM').addEventListener('click', exportKHM);
 // exportBtn.addEventListener('click', () => {
 //   fileInput.click();
 // });
 
-fileInput.addEventListener('change', async () => {
-  await exportKHM();
-});
+// fileInput.addEventListener('change', async () => {
+//   await exportKHM();
+// });
 async function exportKHM() {
   // document.getElementById('glbInput').click();
 
-  const file = fileInput.files[0];
-  if (!file) {
+  // const file = fileInput.files[0];
+  if (!previewModel) {
     alert('Please select a GLB file first.');
     return;
   }
 
-  const arrayBuffer = await file.arrayBuffer();
-  const blobURL = URL.createObjectURL(new Blob([arrayBuffer]));
-  const gltf = await loadGLB(blobURL);
-  const scene = gltf.scene;
+  // const arrayBuffer = await file.arrayBuffer();
+  // const blobURL = URL.createObjectURL(new Blob([arrayBuffer]));
+  // const gltf = await loadGLB(blobURL);
+  // const scene = gltf.scene;
   const writer = new KHMWriter(model);
 
-  writeKHMFromGLB(scene, writer);
+  writeKHMFromGLB(previewModel, writer);
 
   // fs.writeFileSync(OUTPUT, writer.getUint8Array());
   const blob2 = await new Blob([new Uint8Array(writer.buffer)], {
