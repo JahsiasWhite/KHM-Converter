@@ -2,91 +2,113 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>KHM Loader</title>
+    <title>KHM Viewer</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        font-family: 'Segoe UI', sans-serif;
+        background: #000;
+      }
+
+      #threeCanvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        z-index: 0;
+      }
+
+      .ui-panel {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        background-color: rgba(20, 20, 20, 0.85);
+        padding: 1rem;
+        border-radius: 12px;
+        box-shadow: 0 0 12px rgba(0, 0, 0, 0.4);
+        color: #fff;
+        z-index: 1;
+        width: 300px;
+      }
+
+      .ui-panel h2 {
+        margin: 0 0 1rem;
+        font-size: 1.2rem;
+        color: #61dafb;
+      }
+
+      .ui-panel label {
+        display: block;
+        margin: 0.5rem 0 0.25rem;
+        font-size: 0.85rem;
+        color: #ccc;
+      }
+
+      .ui-panel input[type='file'] {
+        width: 100%;
+        margin-bottom: 0.5rem;
+        text-indent: 0.4rem;
+        padding-top: 0.4rem;
+        padding-bottom: 0.4rem;
+        border: none;
+        border-radius: 6px;
+        background: #333;
+        color: #fff;
+      }
+
+      .ui-panel button {
+        margin-top: 0.5rem;
+        width: 100%;
+        padding: 0.6rem;
+        border: none;
+        border-radius: 6px;
+        background: #61dafb;
+        color: #000;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+
+      .ui-panel button:hover {
+        background-color: #4dbde6;
+      }
+
+      #output {
+        margin-top: 1rem;
+        font-size: 0.75rem;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        max-height: 120px;
+        overflow-y: auto;
+        color: #ccc;
+        background: #111;
+        padding: 0.5rem;
+        border-radius: 8px;
+        border: 1px solid #333;
+      }
+    </style>
   </head>
   <body>
-    <input type="file" id="fileInput" accept=".khm" />
-    <input type="file" id="ddsInput" accept=".dds" />
+    <!-- Floating UI panel -->
+    <div class="ui-panel">
+      <h2>KHM Viewer</h2>
+      <label for="fileInput">KHM File</label>
+      <input type="file" id="fileInput" accept=".khm" />
 
-    <input type="file" id="gltfInput" accept=".zip" />
+      <label for="ddsInput">DDS Texture</label>
+      <input type="file" id="ddsInput" accept=".dds" />
 
-    <button id="exportGLTF">Export GLTF</button>
+      <button id="exportKHM">Export GLB as KHM</button>
 
-    <pre id="output"></pre>
+      <!-- <div id="output">No model loaded.</div> -->
+    </div>
 
     <script type="module" src="main.js"></script>
-    <!-- <script type="module">
-      import * as THREE from 'https://cdn.skypack.dev/three@0.154.0';
-    </script> -->
-    <!-- 
-    <script type="module">
-      import { CLoader } from './khmModel.js';
-
-      fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files[0];
-        const arrayBuffer = await file.arrayBuffer();
-
-        const loader = new CLoader(arrayBuffer);
-        const { header, model } = loader.loadModel();
-
-        if (!header) {
-          output.textContent = 'Invalid file';
-          return;
-        }
-
-        output.textContent =
-          `Signature: ${String.fromCharCode(...header.uiSig)}\n` +
-          `Version: ${header.uiVer}\n` +
-          `Bones Read: ${model.numBones}\n\n` +
-          model.lBones
-            .map(
-              (b, i) =>
-                `${i}: ${b.szName} (id: ${b.uiId}, parent: ${b.uiParentId})`
-            )
-            .join('\n') +
-          '\n' +
-          model.lHelpers.map((h, i) => `${i}: ${h.szName} (helper)`).join('\n');
-
-        if (model.pMesh) {
-          output.textContent +=
-            `\nMesh: ${model.pMesh.szName}\n` +
-            `Vertices: ${model.pMesh.numVertices}\n` +
-            `Indices: ${model.pMesh.numIndices}\n` +
-            `Min: ${model.pMesh.min.join(', ')}\n` +
-            `Max: ${model.pMesh.max.join(', ')}\n`;
-        }
-
-        if (model.pMesh.pSkinWeights.length) {
-          output.textContent += `Skinned Vertices: ${model.pMesh.pSkinWeights.length}\n`;
-        }
-        if (model.pMesh.pCollisions.length) {
-          output.textContent += `Collisions: ${model.pMesh.pCollisions.length}\n`;
-        }
-
-        if (model.pAnimation) {
-          output.textContent +=
-            `\nAnimation:\n` +
-            `Nodes: ${model.pAnimation.numNodes}\n` +
-            `Frames: ${model.pAnimation.numNodeFrames}\n` +
-            `Frame Duration: ${model.pAnimation.frameDurationMs.toFixed(
-              2
-            )} ms\n`;
-        }
-
-        if (model.pAnimationMask) {
-          output.textContent +=
-            `\nAnimation Mask:\n` +
-            `Masked Nodes: ${model.pAnimationMask.numNodes}\n` +
-            model.pAnimationMask.pNodes
-              .map(
-                (entry) =>
-                  `- ${entry.szObjectName}: ${
-                    entry.mask ? 'Enabled' : 'Masked'
-                  }`
-              )
-              .join('\n');
-        }
-      });
-    </script> -->
   </body>
 </html>

@@ -14,6 +14,7 @@ let camera, scene, renderer, controls, transform;
 let skinnedMesh = null;
 let vertexHandles = [];
 let model = null;
+let meshMaterial = null;
 
 init();
 
@@ -46,16 +47,15 @@ function init() {
   scene.add(new THREE.AmbientLight(0xffffff, 0.3));
 
   document.getElementById('fileInput').addEventListener('change', loadModel2);
-  document
-    .getElementById('gltfInput')
-    .addEventListener('change', loadZippedGLTF);
-  document.getElementById('exportGLTF').addEventListener('click', exportKHM);
+  // document
+  //   .getElementById('gltfInput')
+  //   .addEventListener('change', loadZippedGLTF);
+  document.getElementById('exportKHM').addEventListener('click', exportKHM);
 
   window.addEventListener('pointerdown', onPointerDown);
 
   animate();
 }
-let meshMaterial = null;
 
 const ddsInput = document.getElementById('ddsInput');
 ddsInput.addEventListener('change', async (e) => {
@@ -84,7 +84,24 @@ ddsInput.addEventListener('change', async (e) => {
   meshMaterial.needsUpdate = true;
 });
 
+let currentModel = null;
 async function loadModel2(e) {
+  // Remove old model if it exists
+  if (currentModel) {
+    scene.remove(currentModel);
+    currentModel.traverse((child) => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach((m) => m.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    });
+    currentModel = null;
+  }
+
   const file = e.target.files[0];
   const buffer = await file.arrayBuffer();
 
@@ -130,46 +147,12 @@ async function loadModel2(e) {
     flatShading: false,
   });
   const mesh = new THREE.Mesh(geo, meshMaterial);
+  currentModel = mesh;
   scene.add(mesh);
 
   //   const texture = new THREE.TextureLoader().load('path/to/yourTexture.dds');
   //   mat.map = texture;
   //   mat.needsUpdate = true;
-}
-
-function loadModel(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  file.arrayBuffer().then((buffer) => {
-    const loader = new CLoader(buffer);
-    const result = loader.loadModel();
-    model = result.model;
-
-    const geometry = new THREE.BufferGeometry();
-    const verts = [];
-    const indices = model.pMesh.pIndices;
-
-    for (const v of model.pMesh.pVertices) {
-      verts.push(v[0], v[1], v[2]);
-    }
-
-    geometry.setAttribute(
-      'position',
-      new THREE.Float32BufferAttribute(verts, 3)
-    );
-    geometry.setIndex(indices);
-    geometry.computeVertexNormals();
-
-    const material = new THREE.MeshStandardMaterial({
-      color: 0xcccccc,
-      vertexColors: false,
-    });
-    skinnedMesh = new THREE.Mesh(geometry, material);
-    scene.add(skinnedMesh);
-
-    createVertexHandles();
-  });
 }
 
 async function loadZippedGLTF(event) {
@@ -297,8 +280,19 @@ function writeKHMFromGLB(scene, writer) {
   const mergedGeometry = BufferGeometryUtils.mergeGeometries(geometries, false);
   const mesh = new THREE.Mesh(mergedGeometry);
 
+  // Normalize size and center of the model
+  const position = mesh.geometry.getAttribute('position');
+  const box = new THREE.Box3().setFromBufferAttribute(position);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const scale = 1.0 / maxDim;
+  const center = box.getCenter(new THREE.Vector3());
+  mesh.geometry.translate(-center.x, -center.y, -center.z);
+  mesh.geometry.scale(scale, scale, scale);
+
   const geometry = mesh.geometry;
-  const position = geometry.getAttribute('position');
+  // const position = geometry.getAttribute('position');
   const normal = geometry.getAttribute('normal');
   const uv = geometry.getAttribute('uv');
   const index = geometry.index;
@@ -365,7 +359,7 @@ function writeKHMFromGLB(scene, writer) {
   writer.writeUint32(0); // no collision
 
   // Bounding box (min/max)
-  const box = new THREE.Box3().setFromBufferAttribute(position);
+  // const box = new THREE.Box3().setFromBufferAttribute(position);
   writer.writeFloat32(box.min.x);
   writer.writeFloat32(box.min.y);
   writer.writeFloat32(box.min.z);
@@ -380,6 +374,44 @@ function writeKHMFromGLB(scene, writer) {
 
   // Animation mask
   writer.writeUint8(0);
+
+  // Export texture as a png to be converted to .dds later
+  // The user will have to convert it manually
+  scene.traverse((child) => {
+    if (child.isMesh) {
+      // console.log('vertexColors', child.material.vertexColors); // If this is true, is a different conversion required?
+
+      const texture = child.material.map;
+      const canvas = extractTextureCanvasFromMap(texture);
+      if (canvas) {
+        downloadCanvasAsDDSPlaceholder(canvas, 'diffuse.png'); // manually convert to .dds
+      }
+    }
+  });
+}
+function downloadCanvasAsDDSPlaceholder(canvas, filename = 'diffuse.png') {
+  canvas.toBlob((blob) => {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename; // .png for now, convert to .dds later
+    link.click();
+  }, 'image/png');
+}
+function extractTextureCanvasFromMap(map) {
+  const bitmap = map.source?.data;
+  if (!(bitmap instanceof ImageBitmap)) {
+    console.warn('No image bitmap found in texture source');
+    return null;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0);
+
+  return canvas;
 }
 export async function loadGLB(filePath) {
   const loader = new GLTFLoader();
