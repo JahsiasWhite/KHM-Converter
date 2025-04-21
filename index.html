@@ -24,10 +24,17 @@
         z-index: 0;
       }
 
-      .ui-panel {
+      .ui-container {
         position: absolute;
         top: 20px;
         left: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        z-index: 10;
+      }
+
+      .ui-panel {
         background-color: rgba(20, 20, 20, 0.85);
         padding: 1rem;
         border-radius: 12px;
@@ -95,33 +102,30 @@
     </style>
   </head>
   <body>
-    <!-- Floating UI panel -->
-    <div class="ui-panel">
-      <h2>KHM Viewer</h2>
-      <label for="fileInput">KHM File</label>
-      <input type="file" id="fileInput" accept=".khm" />
+    <div class="ui-container">
+      <!-- KHM Panel -->
+      <div class="ui-panel" id="khmPanel">
+        <div class="ui-header"><h2>KHM Viewer</h2></div>
+        <div class="ui-content">
+          <label for="fileInput">KHM File</label>
+          <input type="file" id="fileInput" accept=".khm" />
 
-      <label for="ddsInput">DDS Texture</label>
-      <input type="file" id="ddsInput" accept=".dds" />
+          <label for="ddsInput">DDS Texture</label>
+          <input type="file" id="ddsInput" accept=".dds" />
+        </div>
+      </div>
 
-      <label for="ddsInput">GLB Preview</label>
-      <input type="file" id="glbPreviewInput" accept=".glb" />
-      <button id="rotateLeftBtn">Rotate Left 90°</button>
-      <button id="rotateRightBtn">Rotate Right 90°</button>
-
-      <!-- <label id="glbInput" for="exportKHM">Export GLB to KHM</label> -->
-      <!-- <input type="file" id="exportKHM" accept=".glb" /> -->
-      <button id="exportKHM">Export GLB to KHM</button>
-      <!-- <button id="exportKHM">Export GLB as KHM</button> -->
-      <!-- <input
-        type="file"
-        id="glbInput"
-        accept=".glb,.gltf"
-        style="display: none"
-      />
-      <button id="exportKHM">Export GLB as KHM</button> -->
-
-      <!-- <div id="output">No model loaded.</div> -->
+      <!-- GLB Panel -->
+      <div class="ui-panel" id="glbPanel">
+        <div class="ui-header"><h2>GLB Tools</h2></div>
+        <div class="ui-content">
+          <label for="glbPreviewInput">GLB Preview</label>
+          <input type="file" id="glbPreviewInput" accept=".glb" />
+          <button id="rotateLeftBtn">Rotate Left 90°</button>
+          <button id="rotateRightBtn">Rotate Right 90°</button>
+          <button id="exportKHM">Export GLB to KHM</button>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="main.js"></script>
