@@ -150,9 +150,84 @@ async function loadModel2(e) {
   currentModel = mesh;
   scene.add(mesh);
 
-  //   const texture = new THREE.TextureLoader().load('path/to/yourTexture.dds');
-  //   mat.map = texture;
-  //   mat.needsUpdate = true;
+  // Center and normalize the geometry
+  const position = geo.getAttribute('position');
+  const box = new THREE.Box3().setFromBufferAttribute(position);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const scale = 1.0 / maxDim;
+  geo.translate(-center.x, -center.y, -center.z); // move to center
+  geo.scale(scale, scale, scale); // optional: normalize scale
+  // Add dot at the center of the model
+  // scene.add(
+  //   new THREE.Mesh(
+  //     new THREE.SphereGeometry(0.01),
+  //     new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+  //   )
+  // );
+
+  // Add visual helpers
+  // addVisualHelpers(model, meshMaterial);
+}
+
+function addVisualHelpers(model, material) {
+  if (model.lHelpers && model.lHelpers.length > 0) {
+    for (const helper of model.lHelpers) {
+      if (helper.szName !== 'muzzle') {
+        // TODO: Add other helpers once we get this working
+        return;
+      }
+
+      // TODO: I dont think this is correct, but it works for now
+      const matrix = new THREE.Matrix4()
+        .fromArray(Array.from(helper.matGlobal))
+        .transpose();
+
+      const blob = new THREE.Mesh(
+        new THREE.SphereGeometry(0.02),
+        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+      );
+      blob.applyMatrix4(matrix);
+      blob.name = helper.szName;
+
+      scene.add(blob);
+      console.log(`🔴 Helper "${helper.szName}" added`);
+
+      blob.name = helper.szName;
+      blob.userData.isHelper = true;
+      scene.add(blob);
+
+      // Attach transform controls to the blob if it's the muzzle
+      if (blob.name === 'muzzle') {
+        transform.attach(blob);
+      }
+    }
+  }
+  transform.addEventListener('objectChange', () => {
+    const obj = transform.object;
+    if (!obj || !obj.userData.isHelper) return;
+
+    // Update the corresponding helper's matrix for export
+    const index = model.lHelpers.findIndex((h) => h.szName === obj.name);
+    if (index !== -1) {
+      const newMatrix = new THREE.Matrix4().compose(
+        obj.position,
+        obj.quaternion,
+        obj.scale
+      );
+
+      // Overwrite matGlobal with updated Float32Array
+      model.lHelpers[index].matGlobal.set(newMatrix.elements);
+      model.lHelpers[index].matLocal.set(newMatrix.elements);
+      console.log(
+        '🔵 Helper matrix updated',
+        model.lHelpers[index].matGlobal,
+        model.lHelpers[index].matLocal
+      );
+    }
+  });
 }
 
 async function loadZippedGLTF(event) {
@@ -566,19 +641,19 @@ function onPointerDown(e) {
   }
 }
 
-transform.addEventListener('objectChange', () => {
-  const handle = transform.object;
-  const index = handle.userData.vertexIndex;
-  const pos = handle.position;
+// transform.addEventListener('objectChange', () => {
+//   const handle = transform.object;
+//   const index = handle.userData.vertexIndex;
+//   const pos = handle.position;
 
-  model.pMesh.pVertices[index][0] = pos.x;
-  model.pMesh.pVertices[index][1] = pos.y;
-  model.pMesh.pVertices[index][2] = pos.z;
+//   model.pMesh.pVertices[index][0] = pos.x;
+//   model.pMesh.pVertices[index][1] = pos.y;
+//   model.pMesh.pVertices[index][2] = pos.z;
 
-  const attr = skinnedMesh.geometry.attributes.position;
-  attr.setXYZ(index, pos.x, pos.y, pos.z);
-  attr.needsUpdate = true;
-});
+//   const attr = skinnedMesh.geometry.attributes.position;
+//   attr.setXYZ(index, pos.x, pos.y, pos.z);
+//   attr.needsUpdate = true;
+// });
 
 function animate() {
   requestAnimationFrame(animate);
