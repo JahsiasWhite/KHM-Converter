@@ -1,5 +1,9 @@
-// khmWriter.js
-// TODO: I think a lot of these functions are unused
+// TODO: I should have thesee locally
+import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
+import * as BufferGeometryUtils from 'https://esm.sh/three@0.154.0/examples/jsm/utils/BufferGeometryUtils.js';
+
+const MAX_NAME = 48;
+
 export class KHMWriter {
   constructor(model) {
     this.model = model;
@@ -26,220 +30,165 @@ export class KHMWriter {
     }
   }
 
-  buildHeader() {
-    this.writeString('KHM\0', 4);
-    this.writeUint32(101); // KHM_VERSION
+  writeKHM(model) {
+    this.writeHeader();
+
+    // Get all meshes from the model
+    model.updateMatrixWorld(true);
+    const geometries = [];
+    model.traverse((child) => {
+      if (child.isMesh) {
+        const geo = child.geometry.clone();
+        geo.applyMatrix4(child.matrixWorld);
+        geometries.push(geo);
+      }
+    });
+
+    if (geometries.length === 0) throw new Error('No meshes found');
+
+    // Merge meshes into one
+    const mergedGeometry = BufferGeometryUtils.mergeGeometries(
+      geometries,
+      false
+    );
+    const mesh = new THREE.Mesh(mergedGeometry);
+
+    // Normalize size and center of the model
+    const position = mesh.geometry.getAttribute('position');
+    const box = new THREE.Box3().setFromBufferAttribute(position);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 1.0 / maxDim;
+    const center = box.getCenter(new THREE.Vector3());
+    mesh.geometry.translate(-center.x, -center.y, -center.z);
+    mesh.geometry.scale(scale, scale, scale);
+
+    // Bones (none for now)
+    this.writeBones();
+
+    // Helpers (none for now)
+    this.writeHelpers();
+
+    // Meshes
+    this.writeMeshes(mesh, position, box);
+
+    // Animation
+    this.writeAnimation();
+
+    // Animation mask
+    this.writeAnimationMask();
   }
 
-  buildBones() {
-    const bones = this.model.lBones || [];
-    this.writeUint8(bones.length);
-    for (const bone of bones) {
-      this.writeString(bone.szName || '', 48);
-      this.writeUint32(bone.uiId);
-      this.writeUint32(bone.uiParentId);
-      for (let i = 0; i < 16; i++) this.writeFloat32(bone.matLocal[i]);
-      for (let i = 0; i < 16; i++) this.writeFloat32(bone.matGlobal[i]);
-    }
-  }
-
-  buildHelpers() {
-    const helpers = this.model.lHelpers || [];
-    this.writeUint8(helpers.length);
-    for (const h of helpers) {
-      this.writeString(h.szName || '', 48);
-      this.writeUint32(h.uiId);
-      this.writeUint32(h.uiParentId);
-      for (let i = 0; i < 16; i++) this.writeFloat32(h.matLocal[i]);
-      for (let i = 0; i < 16; i++) this.writeFloat32(h.matGlobal[i]);
-    }
-  }
-
-  buildAnimation() {
-    const anim = this.model.pAnimation;
-    if (
-      !anim ||
-      !anim.pNodeTransforms ||
-      !anim.numNodeFrames ||
-      !anim.numNodes
-    ) {
-      this.writeUint8(0); // no animation
-      return;
-    }
-
-    this.writeUint8(1); // has animation
-    this.writeUint32(anim.numNodes);
-    this.writeFloat32(0); // start time (0)
-    this.writeFloat32(anim.numNodeFrames * (anim.frameDurationMs / 1000)); // end time
-    this.writeUint32(anim.numNodeFrames);
-
-    // skip node animation structs (debug use only)
-    for (let i = 0; i < anim.numNodes; i++) {
-      this.writeString('', 48); // node name
-      this.writeUint32(i); // node ID
-    }
-
-    for (const node of anim.pNodeTransforms) {
-      for (let i = 0; i < 4; i++) this.writeFloat32(node.qRot[i]);
-      for (let i = 0; i < 3; i++) this.writeFloat32(node.vTrans[i]);
-      for (let i = 0; i < 3; i++) this.writeFloat32(node.vScale[i]);
-    }
-  }
-
-  buildAnimationMask() {
-    const mask = this.model.pAnimationMask;
-    if (!mask || !mask.pNodes || !mask.numNodes) {
-      this.writeUint8(0); // no mask
-      return;
-    }
-
+  writeMeshes(mesh, position, box) {
+    // Mesh present
     this.writeUint8(1);
-    this.writeUint32(mask.numNodes);
-    for (const entry of mask.pNodes) {
-      this.writeString(entry.szObjectName || '', 48);
-      this.writeUint32(entry.mask);
-    }
+
+    // sObjectBase
+    this.writeString(mesh.name || 'mesh', MAX_NAME);
+    this.writeUint32(1); // id
+    this.writeUint32(0); // parent id
+
+    for (let i = 0; i < 16; i++)
+      this.writeFloat32(i === 0 || i === 5 || i === 10 || i === 15 ? 1 : 0); // mat local
+    for (let i = 0; i < 16; i++)
+      this.writeFloat32(i === 0 || i === 5 || i === 10 || i === 15 ? 1 : 0); // mat global
+
+    // Geometry
+    const geometry = mesh.geometry;
+    this.writeGeometry(geometry, position, box);
   }
 
-  buildMesh() {
-    if (!this.model.pMesh) {
-      this.writeUint8(0); // no mesh
-      return;
-    }
+  writeGeometry(geometry, position, box) {
+    const normal = geometry.getAttribute('normal');
+    const uv = geometry.getAttribute('uv');
+    const index = geometry.index;
 
-    this.writeUint8(1); // has mesh
+    this.writeUint32(position.count); // num verts
 
-    const mesh = this.model.pMesh;
-    this.writeString(mesh.szName || '', 48);
-    this.writeUint32(mesh.uiId);
-    this.writeUint32(mesh.uiParentId);
-    for (let i = 0; i < 16; i++) this.writeFloat32(mesh.matLocal[i]);
-    for (let i = 0; i < 16; i++) this.writeFloat32(mesh.matGlobal[i]);
-
-    // Vertices
-    const geometry = mesh.geometry;
-    this.writeUint32(mesh.numVertices);
-    for (const v of mesh.pVertices)
-      for (let i = 0; i < 3; i++) this.writeFloat32(v[i]);
-
-    // 🔧 Inject this BEFORE writing normals
-    if (!mesh.pNormals || mesh.pNormals.length !== mesh.numVertices) {
-      console.warn(
-        `KHMWriter: pNormals missing or incomplete (${mesh.pNormals?.length}), generating [0,1,0] normals`
-      );
-      mesh.pNormals = [];
-      // for (let i = 0; i < mesh.numVertices; i++) {
-      //   mesh.pNormals.push([0, 1, 0]); // or compute true normals if needed
-      // }
+    // Positions
+    for (let i = 0; i < position.count; i++) {
+      this.writeFloat32(position.getX(i));
+      this.writeFloat32(position.getY(i));
+      this.writeFloat32(position.getZ(i));
     }
 
     // Normals
-    for (const n of mesh.pNormals)
-      for (let i = 0; i < 3; i++) this.writeFloat32(n[i]);
-    // if (geometry.attributes.normal) {
-    //   const normals = geometry.attributes.normal.array;
-    //   for (let i = 0; i < normals.length; i += 3) {
-    //     model.pMesh.pNormals.push([normals[i], normals[i + 1], normals[i + 2]]);
-    //   }
-    // }
-    // for (const n of mesh.pNormals)
-    //   for (let i = 0; i < 3; i++) this.writeFloat32(n[i]);
-    console.error(mesh.pNormals.length, mesh.numVertices, geometry);
+    for (let i = 0; i < normal.count; i++) {
+      this.writeFloat32(normal.getX(i));
+      this.writeFloat32(normal.getY(i));
+      this.writeFloat32(normal.getZ(i));
+    }
 
     // Indices
-    this.writeUint32(mesh.numIndices);
-    for (const idx of mesh.pIndices)
-      this.buffer.push(idx & 0xff, (idx >> 8) & 0xff);
-
-    // Face Normals
-    const numFaces = mesh.numIndices / 3;
-    for (let i = 0; i < numFaces; i++) {
-      const fn = mesh.pFaceNormals[i];
-      for (let j = 0; j < 3; j++) this.writeFloat32(fn[j]);
+    this.writeUint32(index.count);
+    for (let i = 0; i < index.count; i++) {
+      this.writeUint16(index.array[i]);
     }
 
-    // Vertex colors
-    if (mesh.pColors && mesh.pColors.length) {
-      this.writeUint8(1);
-      for (const c of mesh.pColors) this.writeUint32(c);
-    } else {
-      this.writeUint8(0);
+    // Face normals (placeholder)
+    // TODO
+    const faceCount = index.count / 3;
+    for (let i = 0; i < faceCount; i++) {
+      this.writeFloat32(0);
+      this.writeFloat32(1);
+      this.writeFloat32(0);
     }
 
-    // TexCoords
-    const texCoordCount = mesh.pTexCoords.filter(
-      (tc) => tc && tc.length
-    ).length;
-    this.writeUint32(texCoordCount);
-    for (let i = 0; i < texCoordCount; i++) {
-      for (const uv of mesh.pTexCoords[i]) {
-        this.writeFloat32(uv[0]);
-        this.writeFloat32(uv[1]);
-      }
+    // Vertex colors (placeholder)
+    // TODO
+    this.writeUint8(0);
+
+    // TexCoord count
+    this.writeUint32(1);
+    for (let i = 0; i < uv.count; i++) {
+      this.writeFloat32(uv.getX(i));
+      this.writeFloat32(uv.getY(i));
     }
 
-    // Skin
-    const hasSkin = mesh.pSkinWeights && mesh.pSkinWeights.length > 0;
-    this.writeUint8(hasSkin ? 1 : 0);
-    if (hasSkin) {
-      for (const sw of mesh.pSkinWeights)
-        for (let i = 0; i < 4; i++) this.writeFloat32(sw[i]);
-      for (const bi of mesh.pSkinBoneIndices)
-        for (let i = 0; i < 4; i++) this.writeUint8(bi[i]);
-    }
+    // Skinning
+    // TODO
+    this.writeUint8(0);
 
-    // Collision
-    this.writeUint32(mesh.numCollisions);
-    for (const col of mesh.pCollisions || []) {
-      this.writeUint32(col.type);
-      for (let i = 0; i < 16; i++) this.writeFloat32(col.transform[i]);
+    // Collision data
+    // TODO
+    this.writeUint32(0);
 
-      switch (col.type) {
-        case 0: // SPHERE
-          this.writeFloat32(col.params.radius);
-          break;
-        case 1: // BOX
-          for (let i = 0; i < 3; i++) this.writeFloat32(col.params.extents[i]);
-          break;
-        case 2: // CAPSULE
-          this.writeFloat32(col.params.radius);
-          this.writeFloat32(col.params.halfHeight);
-          break;
-        case 3: // CONVEX_MESH
-          this.writeUint8(1); // shared
+    // Bounding box (min/max)
+    this.writeFloat32(box.min.x);
+    this.writeFloat32(box.min.y);
+    this.writeFloat32(box.min.z);
+    this.writeFloat32(box.max.x);
+    this.writeFloat32(box.max.y);
+    this.writeFloat32(box.max.z);
 
-          this.writeUint32(col.params.pPolygons.length);
-          for (const poly of col.params.pPolygons) {
-            for (let i = 0; i < 3; i++) this.writeUint16(poly.indices[i]);
-          }
-
-          this.writeUint32(col.params.pIndices.length);
-          for (const idx of col.params.pIndices) this.writeUint16(idx);
-
-          this.writeUint32(col.params.pVertices.length);
-          for (const v of col.params.pVertices) {
-            for (let i = 0; i < 3; i++) this.writeFloat32(v[i]);
-          }
-          break;
-      }
-    }
-
-    // Bounds
-    for (let i = 0; i < 3; i++) this.writeFloat32(mesh.min[i]);
-    for (let i = 0; i < 3; i++) this.writeFloat32(mesh.max[i]);
-
-    this.writeFloat32(mesh.volume);
+    this.writeFloat32(0); // volume
   }
 
-  write() {
-    this.buildHeader();
-    this.buildBones();
-    this.buildHelpers();
-    this.buildMesh();
-    this.buildAnimation();
-    this.buildAnimationMask();
-    return new Blob([new Uint8Array(this.buffer)], {
-      type: 'application/octet-stream',
-    });
+  /* KHM + version */
+  writeHeader() {
+    this.writeUint8('K'.charCodeAt(0));
+    this.writeUint8('H'.charCodeAt(0));
+    this.writeUint8('M'.charCodeAt(0));
+
+    this.writeUint8(0x00);
+    this.writeUint32(101);
+  }
+
+  writeBones() {
+    this.writeUint8(0);
+  }
+
+  writeHelpers() {
+    // TODO: Need to figure these out still, they weren't behaving as expected
+    this.writeUint8(0);
+  }
+
+  writeAnimation() {
+    this.writeUint8(0);
+  }
+
+  writeAnimationMask() {
+    this.writeUint8(0);
   }
 }

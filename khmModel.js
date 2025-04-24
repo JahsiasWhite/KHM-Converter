@@ -1,7 +1,6 @@
-// khmModel.js
 export const KHM_VERSION = 101;
 
-export class CLoader {
+export class KHMLoader {
   constructor(arrayBuffer) {
     this.view = new DataView(arrayBuffer);
     this.offset = 0;
@@ -355,7 +354,6 @@ export class CLoader {
 
     this.readHelpers(model);
 
-    // TODO: Double check this is correct
     this.readMeshes(model);
 
     this.readAnimation(model);
@@ -408,7 +406,7 @@ export class sObjectBase {
 
   /**
    * Populates the object from a DataView at the current offset.
-   * @param {CLoader} loader
+   * @param {KHMLoader} loader
    */
   static fromLoader(loader) {
     const obj = new sObjectBase();
