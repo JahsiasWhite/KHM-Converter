@@ -1,6 +1,6 @@
 # KHM Converter
 
-Tools for reading .khm files and converting .glb files into .khm format. Includes a browser-based demo to test functionality.
+Tools for reading .khm files and converting .glb files into .khm format
 
 ## Usage
 
@@ -25,10 +25,7 @@ const blob = new Blob([new Uint8Array(writer.buffer)], { type: 'application/octe
 
 ## Running the Demo
 
-Start the server and open the browser demo:
+This project includes a simple web application in the `/examples` directory to demonstrate the KHM loading and writing functionality directly in your browser. To run it:
 
-```
-python server.py
-```
-
-Open http://localhost:8000/examples/
+1.  Navigate to the `/examples` directory
+2.  Start a local HTTP server to serve the `index.html` file
