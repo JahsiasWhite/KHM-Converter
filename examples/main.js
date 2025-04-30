@@ -99,10 +99,37 @@ async function applyDDSTexture(e) {
   meshMaterial.map = texture;
   meshMaterial.needsUpdate = true;
 }
+function removeHelperOrbs() {
+  scene.children.forEach((obj) => {
+    if (obj.isMesh && obj.geometry?.type === 'SphereGeometry') {
+      scene.remove(obj);
+
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach((m) => m.dispose());
+        } else {
+          obj.material.dispose();
+        }
+      }
+    }
+  });
+}
 
 async function loadModel(e) {
   // Remove old model if it exists
   if (currentModel) {
+    // Cleanup helper orbs
+    transform.detach(); // needed? removes controls from the orb
+    helperColorMap = {}; // reset color map for helpers
+    renderHelperLegend();
+    // 🔁 Clean up helper orbs
+    // TODO: Why does it not remove all in one call??
+    removeHelperOrbs();
+    removeHelperOrbs();
+    removeHelperOrbs();
+
+    // Cleanup model
     scene.remove(currentModel);
     currentModel.traverse((child) => {
       if (child.geometry) child.geometry.dispose();
@@ -161,15 +188,16 @@ async function loadModel(e) {
   scene.add(mesh);
 
   // Center and normalize the geometry
-  const position = geo.getAttribute('position');
-  const box = new THREE.Box3().setFromBufferAttribute(position);
-  const center = box.getCenter(new THREE.Vector3());
-  const size = new THREE.Vector3();
-  box.getSize(size);
-  const maxDim = Math.max(size.x, size.y, size.z);
-  const scale = 1.0 / maxDim;
-  geo.translate(-center.x, -center.y, -center.z); // move to center
-  geo.scale(scale, scale, scale); // optional: normalize scale
+  // const position = geo.getAttribute('position');
+  // const box = new THREE.Box3().setFromBufferAttribute(position);
+  // const center = box.getCenter(new THREE.Vector3());
+  // const size = new THREE.Vector3();
+  // box.getSize(size);
+  // const maxDim = Math.max(size.x, size.y, size.z);
+  // const scale = 1.0 / maxDim;
+  // geo.translate(-center.x, -center.y, -center.z); // move to center
+  // geo.scale(scale, scale, scale); // optional: normalize scale
+
   // Add dot at the center of the model
   // scene.add(
   //   new THREE.Mesh(
@@ -179,48 +207,63 @@ async function loadModel(e) {
   // );
 
   // Add visual helpers
-  // addVisualHelpers(model, meshMaterial);
+  addVisualHelpers(model, meshMaterial);
 }
 
-// TODO: Add this back once we have the helpers working
+// Shows what colors belong to what helpers
+let helperColorMap = {};
+function renderHelperLegend(colorMap) {
+  const legend = document.getElementById('helperLegend');
+  if (!legend) return;
+
+  legend.style.display = 'block'; // show when helpers exist
+  legend.innerHTML = ``;
+  for (const [name, color] of Object.entries(helperColorMap)) {
+    legend.innerHTML += `
+      <div>
+        <span style="background:${color};"></span>${name}
+      </div>
+    `;
+  }
+}
+
 function addVisualHelpers(model, material) {
   if (model.lHelpers && model.lHelpers.length > 0) {
     for (const helper of model.lHelpers) {
-      if (helper.szName !== 'muzzle') {
-        // TODO: Add other helpers once we get this working
-        return;
-      }
-
-      // TODO: I dont think this is correct, but it works for now
       const matrix = new THREE.Matrix4()
         .fromArray(Array.from(helper.matGlobal))
-        .transpose();
+        .transpose(); // If it loads wrong, try removing transpose
+
+      // Generate a color for each helper based on its name
+      const hash = [...helper.szName].reduce(
+        (acc, c) => acc + c.charCodeAt(0),
+        0
+      );
+      const hue = (hash * 37) % 360;
+      const color = new THREE.Color(`hsl(${hue}, 100%, 50%)`);
+      helperColorMap[helper.szName] = color.getStyle(); // store for legend
 
       const blob = new THREE.Mesh(
         new THREE.SphereGeometry(0.02),
-        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        new THREE.MeshBasicMaterial({ color })
       );
       blob.applyMatrix4(matrix);
       blob.name = helper.szName;
-
-      scene.add(blob);
-      console.log(`🔴 Helper "${helper.szName}" added`);
-
-      blob.name = helper.szName;
       blob.userData.isHelper = true;
+
       scene.add(blob);
 
-      // Attach transform controls to the blob if it's the muzzle
-      if (blob.name === 'muzzle') {
-        transform.attach(blob);
-      }
+      // Attach transform controls to all helpers (optional: remove if not needed)
+      if (helper.szName === 'muzzle') transform.attach(blob);
+
+      renderHelperLegend();
     }
   }
+
   transform.addEventListener('objectChange', () => {
     const obj = transform.object;
     if (!obj || !obj.userData.isHelper) return;
 
-    // Update the corresponding helper's matrix for export
     const index = model.lHelpers.findIndex((h) => h.szName === obj.name);
     if (index !== -1) {
       const newMatrix = new THREE.Matrix4().compose(
@@ -229,9 +272,9 @@ function addVisualHelpers(model, material) {
         obj.scale
       );
 
-      // Overwrite matGlobal with updated Float32Array
       model.lHelpers[index].matGlobal.set(newMatrix.elements);
       model.lHelpers[index].matLocal.set(newMatrix.elements);
+
       console.log(
         '🔵 Helper matrix updated',
         model.lHelpers[index].matGlobal,
