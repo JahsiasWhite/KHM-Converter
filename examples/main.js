@@ -122,7 +122,7 @@ async function loadModel(e) {
     // Cleanup helper orbs
     transform.detach(); // needed? removes controls from the orb
     helperColorMap = {}; // reset color map for helpers
-    renderHelperLegend();
+    renderHelperLegend({});
     // 🔁 Clean up helper orbs
     // TODO: Why does it not remove all in one call??
     removeHelperOrbs();
@@ -212,13 +212,13 @@ async function loadModel(e) {
 
 // Shows what colors belong to what helpers
 let helperColorMap = {};
-function renderHelperLegend(colorMap) {
-  const legend = document.getElementById('helperLegend');
+function renderHelperLegend(colorMap, documentId = 'helperLegend') {
+  const legend = document.getElementById(documentId);
   if (!legend) return;
 
   legend.style.display = 'block'; // show when helpers exist
   legend.innerHTML = ``;
-  for (const [name, color] of Object.entries(helperColorMap)) {
+  for (const [name, color] of Object.entries(colorMap)) {
     legend.innerHTML += `
       <div>
         <span style="background:${color};"></span>${name}
@@ -256,7 +256,7 @@ function addVisualHelpers(model, material) {
       // Attach transform controls to all helpers (optional: remove if not needed)
       if (helper.szName === 'muzzle') transform.attach(blob);
 
-      renderHelperLegend();
+      renderHelperLegend(helperColorMap);
     }
   }
 
@@ -286,6 +286,7 @@ function addVisualHelpers(model, material) {
 
 async function previewGLB(e) {
   if (previewModel) scene.remove(previewModel);
+  if (currentModel) scene.remove(currentModel);
 
   const file = e.target.files[0];
   const arrayBuffer = await file.arrayBuffer();
@@ -406,3 +407,65 @@ function animate() {
   controls.update();
   renderer.render(scene, camera);
 }
+
+const glbHelpers = []; // track manually added helper objects
+document.getElementById('addHelperBtn').addEventListener('click', () => {
+  if (!previewModel) {
+    alert('Load a GLB model first.');
+    return;
+  }
+
+  const helperName = prompt(
+    'Enter helper name (e.g., muzzle, optics_socket, optics_socket_pistol, IKHandL, silencer_socket, underbarrel):'
+  );
+  if (!helperName) return;
+
+  // Create sphere helper
+  const sphere = new THREE.Mesh(
+    new THREE.SphereGeometry(0.02),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff }) // pick any starter color
+  );
+
+  // Start at model center
+  const box = new THREE.Box3().setFromObject(previewModel);
+  const center = box.getCenter(new THREE.Vector3());
+  sphere.position.copy(center);
+
+  sphere.name = helperName;
+  sphere.userData.isHelper = true;
+  glbHelpers.push(sphere);
+
+  scene.add(sphere);
+  transform.attach(sphere); // auto-attach for placement
+
+  console.log(`🟣 Helper "${helperName}" added at`, sphere.position);
+
+  const color = sphere.material.color.getStyle();
+  renderHelperLegend(
+    Object.fromEntries(glbHelpers.map((h) => [h.name, color])),
+    'helperLegendGLB'
+  );
+
+  previewModel.helpers = glbHelpers;
+});
+
+transform.addEventListener('objectChange', () => {
+  const obj = transform.object;
+  if (!obj || !obj.userData.isHelper) return;
+
+  // Position is already updated — log or sync here
+  console.log(`🟢 "${obj.name}" moved to`, obj.position, previewModel);
+  glbHelpers.map((h, i) =>
+    console.log({
+      szName: h.name,
+      uiId: i,
+      uiParentId: 255, // or assign correctly
+      matLocal: new THREE.Matrix4()
+        .compose(h.position, h.quaternion, h.scale)
+        .toArray(),
+      matGlobal: new THREE.Matrix4()
+        .compose(h.position, h.quaternion, h.scale)
+        .toArray(),
+    })
+  );
+});

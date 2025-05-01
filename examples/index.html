@@ -100,7 +100,7 @@
         border: 1px solid #333;
       }
 
-      #helperLegend {
+      .helperLegend {
         margin-bottom: 1em;
         font-size: 14px;
         font-family: monospace;
@@ -110,17 +110,20 @@
         border-radius: 6px;
         display: none; /* hidden by default */
       }
-      #helperLegend div {
+      .helperLegend div {
         display: flex;
         align-items: center;
         margin-bottom: 4px;
       }
-      #helperLegend span {
+      .helperLegend span {
         display: inline-block;
         width: 12px;
         height: 12px;
         margin-right: 6px;
         border-radius: 50%;
+      }
+      #helperLegendGLB {
+        margin-top: 0.5rem;
       }
     </style>
   </head>
@@ -132,7 +135,7 @@
         <div class="ui-content">
           <label for="fileInput">KHM File</label>
           <input type="file" id="fileInput" accept=".khm" />
-          <div id="helperLegend"></div>
+          <div id="helperLegend" class="helperLegend"></div>
 
           <label for="ddsInput">DDS Texture</label>
           <input type="file" id="ddsInput" accept=".dds" />
@@ -147,6 +150,9 @@
           <input type="file" id="glbPreviewInput" accept=".glb" />
           <button id="rotateLeftBtn">Rotate Left 90°</button>
           <button id="rotateRightBtn">Rotate Right 90°</button>
+          <button id="addHelperBtn">+ Add Helper</button>
+          <div id="helperLegendGLB" class="helperLegend"></div>
+
           <button id="exportKHM">Export GLB to KHM</button>
         </div>
       </div>

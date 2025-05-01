@@ -58,6 +58,8 @@ export class KHMWriter {
     const box = new THREE.Box3().setFromBufferAttribute(position);
     const size = new THREE.Vector3();
     box.getSize(size);
+
+    // TODO: I HAVE to center here to look right on the model
     const maxDim = Math.max(size.x, size.y, size.z);
     const scale = 1.0 / maxDim;
     const center = box.getCenter(new THREE.Vector3());
@@ -68,7 +70,7 @@ export class KHMWriter {
     this.writeBones();
 
     // Helpers (none for now)
-    this.writeHelpers();
+    this.writeHelpers(model);
 
     // Meshes
     this.writeMeshes(mesh, position, box);
@@ -179,9 +181,39 @@ export class KHMWriter {
     this.writeUint8(0);
   }
 
-  writeHelpers() {
-    // TODO: Need to figure these out still, they weren't behaving as expected
-    this.writeUint8(0);
+  writeHelpers(model) {
+    const helpers = model.helpers;
+    if (!helpers) {
+      this.writeUint8(0);
+      return;
+    }
+
+    const count = helpers.length;
+    this.writeUint8(count);
+    if (!count) return;
+
+    let id = 0;
+    for (const helper of helpers) {
+      this.writeString(helper.name, 48); // name string, fixed length
+
+      this.writeUint32(id++);
+      this.writeUint32(255);
+
+      const matrix = new THREE.Matrix4().compose(
+        helper.position,
+        helper.quaternion,
+        helper.scale
+      );
+      // 🔁 Transpose for correct memory layout before writing
+      const matArray = matrix.clone().transpose().toArray();
+      for (const value of matArray) {
+        this.writeFloat32(value);
+      }
+      for (const value of matArray) {
+        // matGlobal?
+        this.writeFloat32(value);
+      }
+    }
   }
 
   writeAnimation() {
