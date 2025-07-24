@@ -194,23 +194,44 @@ export class KHMWriter {
 
     let id = 0;
     for (const helper of helpers) {
-      this.writeString(helper.name, 48); // name string, fixed length
+      this.writeString(helper.szName, 48); // name string, fixed length
 
       this.writeUint32(id++);
-      this.writeUint32(255);
+      this.writeUint32(helper.uiParentId);
 
-      const matrix = new THREE.Matrix4().compose(
-        helper.position,
-        helper.quaternion,
-        helper.scale
+      const yUpToZUp = new THREE.Matrix4().set(
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
       );
-      // 🔁 Transpose for correct memory layout before writing
-      const matArray = matrix.clone().transpose().toArray();
-      for (const value of matArray) {
+
+      const matLocal = new THREE.Matrix4()
+        .fromArray(helper.matLocal)
+        .multiply(yUpToZUp); // Convert to Z-up
+      const matGlobal = new THREE.Matrix4()
+        .fromArray(helper.matGlobal)
+        .multiply(yUpToZUp); // Convert to Z-up
+
+      const matLocalArray = matLocal.clone().transpose().toArray();
+      const matGlobalArray = matGlobal.clone().transpose().toArray();
+
+      for (const value of matLocalArray) {
         this.writeFloat32(value);
       }
-      for (const value of matArray) {
-        // matGlobal?
+      for (const value of matGlobalArray) {
         this.writeFloat32(value);
       }
     }

@@ -360,6 +360,7 @@ export class KHMLoader {
 
     this.readAnimationMask(model);
 
+    console.log('Model loaded:', model);
     return { header, model };
   }
 }

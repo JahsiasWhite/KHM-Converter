@@ -208,6 +208,10 @@ async function loadModel(e) {
 
   // Add visual helpers
   addVisualHelpers(model, meshMaterial);
+
+  const box = new THREE.Box3().setFromObject(currentModel);
+  const boxHelper = new THREE.Box3Helper(box, 0xffff00); // yellow wireframe
+  scene.add(boxHelper);
 }
 
 // Shows what colors belong to what helpers
@@ -254,38 +258,17 @@ function addVisualHelpers(model, material) {
       scene.add(blob);
 
       // Attach transform controls to all helpers (optional: remove if not needed)
-      if (helper.szName === 'muzzle') transform.attach(blob);
+      // if (helper.szName === 'muzzle') transform.attach(blob);
 
       renderHelperLegend(helperColorMap);
     }
   }
-
-  transform.addEventListener('objectChange', () => {
-    const obj = transform.object;
-    if (!obj || !obj.userData.isHelper) return;
-
-    const index = model.lHelpers.findIndex((h) => h.szName === obj.name);
-    if (index !== -1) {
-      const newMatrix = new THREE.Matrix4().compose(
-        obj.position,
-        obj.quaternion,
-        obj.scale
-      );
-
-      model.lHelpers[index].matGlobal.set(newMatrix.elements);
-      model.lHelpers[index].matLocal.set(newMatrix.elements);
-
-      console.log(
-        '🔵 Helper matrix updated',
-        model.lHelpers[index].matGlobal,
-        model.lHelpers[index].matLocal
-      );
-    }
-  });
 }
 
+let previewGroup = new THREE.Group();
 async function previewGLB(e) {
   if (previewModel) scene.remove(previewModel);
+  if (previewGroup) scene.remove(previewGroup);
   if (currentModel) scene.remove(currentModel);
 
   const file = e.target.files[0];
@@ -306,14 +289,22 @@ async function previewGLB(e) {
     previewModel.scale.set(scale, scale, scale);
     previewModel.position.sub(center.multiplyScalar(scale));
 
-    scene.add(previewModel);
+    previewGroup.add(previewModel);
+
+    const box2 = new THREE.Box3().setFromObject(previewModel);
+    const boxHelper = new THREE.Box3Helper(box2, 0xffff00); // yellow wireframe
+    previewGroup.add(boxHelper);
+
+    scene.add(previewGroup);
   });
 }
 
 function rotatePreview(direction) {
-  if (previewModel) {
+  if (previewGroup) {
     exportRotationY += (direction * Math.PI) / 2;
-    previewModel.rotation.y = exportRotationY;
+    previewGroup.rotation.y = exportRotationY;
+
+    updateGLBHelperRotation();
   }
 }
 
@@ -435,7 +426,7 @@ document.getElementById('addHelperBtn').addEventListener('click', () => {
   sphere.userData.isHelper = true;
   glbHelpers.push(sphere);
 
-  scene.add(sphere);
+  previewGroup.add(sphere);
   transform.attach(sphere); // auto-attach for placement
 
   console.log(`🟣 Helper "${helperName}" added at`, sphere.position);
@@ -453,19 +444,23 @@ transform.addEventListener('objectChange', () => {
   const obj = transform.object;
   if (!obj || !obj.userData.isHelper) return;
 
-  // Position is already updated — log or sync here
   console.log(`🟢 "${obj.name}" moved to`, obj.position, previewModel);
-  glbHelpers.map((h, i) =>
-    console.log({
+  updateGLBHelperRotation();
+});
+
+function updateGLBHelperRotation() {
+  const helperData = glbHelpers.map((h, i) => {
+    const matGlobal = h.matrixWorld.clone(); // world transform
+    const matLocal = h.matrix.clone(); // local to parent
+
+    return {
+      helper: h,
       szName: h.name,
       uiId: i,
-      uiParentId: 255, // or assign correctly
-      matLocal: new THREE.Matrix4()
-        .compose(h.position, h.quaternion, h.scale)
-        .toArray(),
-      matGlobal: new THREE.Matrix4()
-        .compose(h.position, h.quaternion, h.scale)
-        .toArray(),
-    })
-  );
-});
+      uiParentId: glbHelpers.length,
+      matLocal: Array.from(matLocal.elements),
+      matGlobal: Array.from(matGlobal.elements),
+    };
+  });
+  previewModel.helpers = helperData;
+}
