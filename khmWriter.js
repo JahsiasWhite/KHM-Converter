@@ -89,7 +89,7 @@ export class KHMWriter {
     // sObjectBase
     this.writeString(mesh.name || 'mesh', MAX_NAME);
     this.writeUint32(1); // id
-    this.writeUint32(0); // parent id
+    this.writeUint32(4294967295); // parent id
 
     for (let i = 0; i < 16; i++)
       this.writeFloat32(i === 0 || i === 5 || i === 10 || i === 15 ? 1 : 0); // mat local
